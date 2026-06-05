@@ -121,7 +121,7 @@ func newAuthListCmd() *cobra.Command {
 				return err
 			}
 			if rootJSON {
-				return printJSON(cmd.OutOrStdout(), f)
+				return printJSON(cmd.OutOrStdout(), redactedAuthList(f))
 			}
 			for _, name := range f.Names() {
 				active := ""
@@ -132,6 +132,26 @@ func newAuthListCmd() *cobra.Command {
 			}
 			return nil
 		},
+	}
+}
+
+func redactedAuthList(f *config.File) map[string]any {
+	profiles := make([]map[string]any, 0, len(f.Profiles))
+	for _, name := range f.Names() {
+		p := f.Profiles[name]
+		profiles = append(profiles, map[string]any{
+			"name":       name,
+			"api_url":    p.APIURL,
+			"storage":    storageName(p.Backend),
+			"api_token":  maskToken(p.APIToken),
+			"is_default": name == f.DefaultProfile,
+			"created_at": p.CreatedAt,
+		})
+	}
+	return map[string]any{
+		"config_path":     config.Path(),
+		"default_profile": f.DefaultProfile,
+		"profiles":        profiles,
 	}
 }
 

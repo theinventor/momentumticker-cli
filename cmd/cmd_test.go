@@ -85,6 +85,51 @@ func TestAuthSaveStatusMasksToken(t *testing.T) {
 	}
 }
 
+func TestAuthListJSONMasksFileBackedToken(t *testing.T) {
+	t.Setenv("MOMENTUMTICKER_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+	t.Setenv("MOMENTUMTICKER_DISABLE_KEYCHAIN", "1")
+
+	const rawToken = "mt_raw_auth_list_secret"
+	if _, _, err := runMomentumCmd(t, "auth", "save",
+		"--profile", "dev",
+		"--base", "http://127.0.0.1:3007",
+		"--token", rawToken,
+		"--storage", "file",
+	); err != nil {
+		t.Fatalf("auth save: %v", err)
+	}
+
+	stdout, _, err := runMomentumCmd(t, "--json", "auth", "list")
+	if err != nil {
+		t.Fatalf("auth list: %v", err)
+	}
+	if strings.Contains(stdout, rawToken) {
+		t.Fatalf("auth list leaked raw token:\n%s", stdout)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("auth list should emit JSON: %v\n%s", err, stdout)
+	}
+	if parsed["default_profile"] != "dev" {
+		t.Fatalf("default_profile = %v, want dev", parsed["default_profile"])
+	}
+	profiles, ok := parsed["profiles"].([]any)
+	if !ok || len(profiles) != 1 {
+		t.Fatalf("profiles = %#v, want one profile", parsed["profiles"])
+	}
+	profile, ok := profiles[0].(map[string]any)
+	if !ok {
+		t.Fatalf("profile entry = %#v", profiles[0])
+	}
+	if profile["name"] != "dev" || profile["storage"] != "file" || profile["is_default"] != true {
+		t.Fatalf("profile metadata = %#v", profile)
+	}
+	if got := profile["api_token"]; got == rawToken || got == "" || got == nil {
+		t.Fatalf("api_token should be masked, got %#v", got)
+	}
+}
+
 func TestFolioCreateRequestShape(t *testing.T) {
 	var gotMethod, gotPath, gotAuth string
 	var gotBody map[string]string
